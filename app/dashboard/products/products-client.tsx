@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { formatNaira } from "@/lib/utils";
+import { compressImage, formatNaira } from "@/lib/utils";
 import type { Product, Vendor } from "@/lib/types";
 
 interface Draft {
@@ -42,14 +42,21 @@ export default function ProductsClient({
     setUploading(true);
     setError(null);
     const supabase = createClient();
-    const ext = file.name.split(".").pop() || "jpg";
+
+    // Compress in-browser before upload (max 1200px JPEG) to keep
+    // storage usage tiny — a 4MB phone photo becomes ~100KB.
+    const blob = await compressImage(file);
     const path = `products/${Date.now()}-${Math.random()
       .toString(36)
-      .slice(2, 8)}.${ext}`;
+      .slice(2, 8)}.jpg`;
 
     const { error: upErr } = await supabase.storage
       .from("product-images")
-      .upload(path, file, { cacheControl: "3600", upsert: false });
+      .upload(path, blob, {
+        cacheControl: "3600",
+        upsert: false,
+        contentType: blob.type || "image/jpeg",
+      });
 
     if (upErr) {
       setError(`Image upload failed: ${upErr.message}`);

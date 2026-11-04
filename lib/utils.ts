@@ -74,3 +74,42 @@ export function buildOrderSummary(opts: {
 export function whatsappLink(phone: string, text: string): string {
   return `https://wa.me/${normalizePhone(phone)}?text=${encodeURIComponent(text)}`;
 }
+
+/**
+ * Shrink an image in the browser before upload: max 1200px on the long
+ * edge, JPEG quality 0.82. A 4MB phone photo becomes ~100KB — visually
+ * identical on a storefront, ~30x lighter on storage.
+ * Falls back to the original file if compression can't improve on it.
+ */
+export async function compressImage(file: File): Promise<Blob> {
+  const MAX_DIM = 1200;
+  const QUALITY = 0.82;
+
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, MAX_DIM / Math.max(bitmap.width, bitmap.height));
+    const width = Math.round(bitmap.width * scale);
+    const height = Math.round(bitmap.height * scale);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      bitmap.close();
+      return file;
+    }
+    ctx.drawImage(bitmap, 0, 0, width, height);
+    bitmap.close();
+
+    return await new Promise<Blob>((resolve) => {
+      canvas.toBlob(
+        (blob) => resolve(blob && blob.size < file.size ? blob : file),
+        "image/jpeg",
+        QUALITY
+      );
+    });
+  } catch {
+    return file;
+  }
+}
